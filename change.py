@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
 import time
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+
 import requests
 import smtplib
 from config import *
@@ -9,28 +12,33 @@ from datetime import datetime
 
 # from twilio.rest import Client
 
-def send_email(user, pwd, recipient):  # snippet courtesy of david / email sending function
-    SUBJECT = 'SITE UPDATED'  # message subject
-    body = 'CHANGE AT ' + str(url)  # message body
+def send_email(user, pwd, recipient, subject, body):  # snippet courtesy of david / email sending function
+    # SUBJECT = 'SITE UPDATED'  # message subject
+    # body = 'CHANGE AT ' + str(url)  # message body
     gmail_user = user
     gmail_pwd = pwd
     FROM = user
     TO = recipient if type(recipient) is list else [recipient]
-    TEXT = body
 
     # Prepare actual message
-    message = """From: %s\nTo: %s\nSubject: %s\n\n%s
-    """ % (FROM, ", ".join(TO), SUBJECT, TEXT)
+    msg = MIMEMultipart('alternative')
+    msg['Subject'] = subject
+    msg['From'] = FROM
+    msg['To'] = ", ".join(TO)
+    part1 = MIMEText(subject, 'plain')
+    part2 = MIMEText(body, 'html')
+    msg.attach(part1)
+    msg.attach(part2)
     try:
         server = smtplib.SMTP("smtp.gmail.com", 587)  # start smtp server on port 587
         server.ehlo()
         server.starttls()
         server.login(gmail_user, gmail_pwd)  # login to gmail server
-        server.sendmail(FROM, TO, message)  # actually perform sending of mail
+        server.sendmail(FROM, TO, msg.as_string())  # actually perform sending of mail
         server.close()  # end server
-        print('[+]Successfully sent email notification')  # alert user mail was sent
+        print('[+] Successfully sent email notification')  # alert user mail was sent
     except Exception as e:  # else tell user it failed and why (exception e)
-        print("[-]Failed to send notification email, " + str(e))
+        print("[-] Failed to send notification email, " + str(e))
 
 
 # def sendtweet(consumer_key, consumer_secret,access_token, access_token_secret,status_string):
@@ -51,32 +59,41 @@ def send_email(user, pwd, recipient):  # snippet courtesy of david / email sendi
 #         print "[-]Error " +e
 
 def main():
-    print("[+]Starting up monitor on " + url)
-    print("[+]Email on change detect is set to " + str(notify))
-    print("[+]Tweeting is set to " + str(tweet))
-    print("[+]Text notifications set to " + str(text))
+    print("[+] Starting up monitor on " + url)
+    print("[+] Email on change detect is set to " + str(notify))
+    # print("[+] Tweeting is set to " + str(tweet))
+    # print("[+] Text notifications set to " + str(text))
 
+    latest = 0
     with requests.Session() as c:
         try:
-            page1 = c.get(url, headers={'User-Agent': "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/52.0.2743.116 Safari/537.36"})  # base page that will be compared against
+            page1 = c.get(url, headers=HEADERS)  # base page that will be compared against
+            latest = page1.json()["Items"][0]['ID']
+            print("current latest id: %d" % latest)
+            # latest = 0  # debug use
         except Exception as e:
-            print("[-]Error Encountered during initial page retrieval: " + e)
+            print("[-] Error Encountered during initial page retrieval: " + e)
 
         while 1:
-            time.sleep(wait_time)  # wait beetween comparisons
+            time.sleep(wait_time)  # wait between comparisons
             try:
-                page2 = c.get(url, headers={'User-Agent': "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/52.0.2743.116 Safari/537.36"})  # page to be compared against page1 / the base page
+                page2 = c.get(url, headers=HEADERS)  # page to be compared against page1 / the base page
+                current = page2.json()["Items"][0]['ID']
             except Exception as e:
-                print("[+]Error Encountered during comparison page retrieval: " + e)
+                print("[+] Error Encountered during comparison page retrieval: " + e)
 
-            if page1.content == page2.content:  # if else statement to check if content of page remained same
-                print('[-]No Change Detected on ' + str(url) + "\n" + str(datetime.now()))
+            # if page1.content == page2.content:  # if else statement to check if content of page remained same
+            if latest == current:  # if else statement to check if content of page remained same
+                print('[-] No Change Detected on ' + str(url) + "\n" + str(datetime.now()))
             else:
                 status_string = 'Change Detected at ' + str(url) + "\n" + str(datetime.now())
-                message = status_string
-                print("[+]" + status_string)
+                subject = page2.json()["Items"][0]["Title"]
+                body = page2.json()["Items"][0]["Email"]["Body"]
+
+                print("[+] " + status_string)
+                latest = current
                 if notify:
-                    send_email(user, pwd, recipient)  # send notification email
+                    send_email(user, pwd, recipient, subject, body)  # send notification email
                 else:
                     pass
                 # if tweet:
@@ -85,7 +102,7 @@ def main():
                 #     pass
                 # if text:
                 #     sendtext(message)
-                print('\n[+]Retrieving new base page and restarting\n')
+                print('\n[+] Retrieving new base page and restarting\n')
                 main()
 
 
