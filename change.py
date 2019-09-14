@@ -64,7 +64,7 @@ def main():
     # print("[+] Tweeting is set to " + str(tweet))
     # print("[+] Text notifications set to " + str(text))
 
-    latest = 0
+    latest = 106
     with requests.Session() as c:
         try:
             page1 = c.get(url, headers=HEADERS)  # base page that will be compared against
@@ -76,11 +76,15 @@ def main():
 
         while 1:
             time.sleep(wait_time)  # wait between comparisons
-            try:
-                page2 = c.get(url, headers=HEADERS)  # page to be compared against page1 / the base page
-                current = page2.json()["Items"][0]['ID']
-            except Exception as e:
-                print("[+] Error Encountered during comparison page retrieval: " + e)
+            get_success = False
+            while not get_success:
+                try:
+                    page2 = c.get(url, headers=HEADERS)  # page to be compared against page1 / the base page
+                    current = page2.json()["Items"][0]['ID']
+                    get_success = True
+                except Exception as e:
+                    print("[+] Error Encountered during comparison page retrieval: " + e)
+                    time.sleep(wait_time)  # retry after sleep for a while
 
             # if page1.content == page2.content:  # if else statement to check if content of page remained same
             if latest == current:  # if else statement to check if content of page remained same
